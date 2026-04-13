@@ -19,6 +19,7 @@ export default function LandingPage() {
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [cloudSubId, setCloudSubId] = useState<string | null>(null);
   const [vidDimensions, setVidDimensions] = useState({ w: 1080, h: 1920 }); 
+  const [renderedPlayerDimensions, setRenderedPlayerDimensions] = useState({ w: 0, h: 0 }); 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const cloudinaryUploadAbortRef = useRef<AbortController | null>(null);
   
@@ -29,17 +30,29 @@ export default function LandingPage() {
 
   const isPremium = user?.publicMetadata?.isPremium === true;
 
+  // 🟢 FIX: Default State එක 20px (පොඩිම සයිස් එක) කළා
   const [captionColor, setCaptionColor] = useState("#FACC15");
   const [captionFont, setCaptionFont] = useState("Arial"); 
-  const [captionSize, setCaptionSize] = useState("42");
+  const [captionSize, setCaptionSize] = useState("20"); 
   const [captionPosition, setCaptionPosition] = useState("south");
+
+  const updateRenderedPlayerSize = useCallback(() => {
+    const videoEl = videoRef.current;
+    if (!videoEl) return;
+    const nextW = videoEl.clientWidth;
+    const nextH = videoEl.clientHeight;
+    if (nextW > 0 && nextH > 0) {
+      setRenderedPlayerDimensions({ w: nextW, h: nextH });
+    }
+  }, []);
 
   const handleVideoLoadedMetadata = useCallback((e: React.SyntheticEvent<HTMLVideoElement>) => {
     const videoEl = e.currentTarget;
     if (videoEl.videoWidth > 0 && videoEl.videoHeight > 0) {
       setVidDimensions({ w: videoEl.videoWidth, h: videoEl.videoHeight });
     }
-  }, []);
+    updateRenderedPlayerSize();
+  }, [updateRenderedPlayerSize]);
 
   const getLinePercentForPosition = useCallback((position: string) => {
     if (position === 'north') return 12;
@@ -47,14 +60,13 @@ export default function LandingPage() {
     return 88;
   }, []);
 
-  // 🟢 FIX 1: "Chad" Style Fixed Wrapping (අකුරු 22න් පේළිය කඩනවා - TikTok Style)
   const wrapCueText = useCallback((text: string) => {
     const words = text.trim().split(/\s+/).filter(Boolean);
     if (words.length === 0) return text;
     
     const lines: string[] = [];
     let currentLine = '';
-    const maxChars = 22; // ලස්සනට පේන්න ගාණට කඩනවා
+    const maxChars = 22; 
     
     for (const word of words) {
       if ((currentLine + word).length > maxChars && currentLine.length > 0) {
@@ -68,10 +80,15 @@ export default function LandingPage() {
     return lines.join('\n');
   }, []);
 
-  // 🟢 FIX 2: VTT Builder එක ලේසි කළා (බොරු Math අයින් කළා)
   const buildStyledVtt = useCallback((rawVtt: string) => {
     const activePosition = isPremium ? captionPosition : 'south';
     const linePercent = getLinePercentForPosition(activePosition);
+    // 🟢 FIX: Free නම් 20px විතරයි
+    const activeCssFontSize = isPremium ? parseInt(captionSize, 10) : 20;
+
+    const playerW = renderedPlayerDimensions.w > 0 ? renderedPlayerDimensions.w : 300;
+    const estimatedCharWidth = activeCssFontSize * 0.55; 
+    const maxCharsPerLine = Math.max(12, Math.floor((playerW * 0.9) / estimatedCharWidth));
 
     const sections = rawVtt.split(/\r?\n\r?\n/);
     const styledSections = sections.map((section) => {
@@ -86,7 +103,7 @@ export default function LandingPage() {
       if (cueTextLines.length === 0) return section;
 
       const cueText = cueTextLines.join(' ');
-      const wrappedCueText = wrapCueText(cueText); // අර අලුත් 22-char limit එකෙන් කඩනවා
+      const wrappedCueText = wrapCueText(cueText); 
       
       const withSettings = `${timingLine} line:${linePercent}% position:50% align:center`;
 
@@ -98,7 +115,7 @@ export default function LandingPage() {
     });
 
     return styledSections.join('\n\n');
-  }, [captionPosition, isPremium, getLinePercentForPosition, wrapCueText]);
+  }, [captionPosition, captionSize, isPremium, renderedPlayerDimensions.w, getLinePercentForPosition, wrapCueText]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -214,10 +231,11 @@ export default function LandingPage() {
   };
 
   useEffect(() => {
+    // 🟢 FIX: Force lock Free users to Yellow, Bottom, Arial, and Size 20
     if (!isPremium) {
       setCaptionColor('#FACC15');
       setCaptionFont('Arial');
-      setCaptionSize('42');
+      setCaptionSize('20');
       setCaptionPosition('south');
     }
   }, [isPremium]);
@@ -246,21 +264,19 @@ export default function LandingPage() {
     }
   };
 
-  // 🟢 FIX 3: Perfect Resolution-Based Font Scaling
   const updateCloudinaryUrl = (
     vidUrl: string, subId: string, color: string, font: string, cssFontSize: number, position: string,
     nativeDimensions: { w: number, h: number }
   ) => {
     const activeColor = isPremium ? color : '#FACC15';
     const activeFont = isPremium ? font : 'Arial';
-    const activeCssFontSize = isPremium ? cssFontSize : 42;
+    // 🟢 FIX: Free නම් Download එකෙත් 20px විතරයි
+    const activeCssFontSize = isPremium ? cssFontSize : 20;
     const activePosition = isPremium ? position : 'south';
 
-    // බ්‍රවුසරේ Player එකේ සයිස් එක අමතක කරලා, වීඩියෝ එකේ ඔරිජිනල් සයිස් එකට සාපේක්ෂව ගුණ කරනවා
     const nativeW = nativeDimensions.w > 0 ? nativeDimensions.w : 1080;
     const nativeH = nativeDimensions.h > 0 ? nativeDimensions.h : 1920;
 
-    // 1080px වීඩියෝ එකකට සාපේක්ෂව Scale වෙනවා
     const scaleFactor = nativeW / 600; 
     const cloudFontSize = Math.max(18, Math.round(activeCssFontSize * scaleFactor));
     const borderThickness = Math.max(2, Math.round(cloudFontSize / 12));
@@ -308,7 +324,8 @@ export default function LandingPage() {
     const url = URL.createObjectURL(blob);
     setVttPreviewUrl(url);
     if (videoUrl && cloudSubId) {
-      const cssFontSize = isPremium ? parseInt(captionSize, 10) : 42;
+      // 🟢 FIX: Free Preview එකෙත් 20px
+      const cssFontSize = isPremium ? parseInt(captionSize, 10) : 20;
       const activePosition = isPremium ? captionPosition : 'south';
       updateCloudinaryUrl(
         videoUrl, cloudSubId, captionColor, captionFont, cssFontSize, activePosition, vidDimensions
@@ -347,9 +364,10 @@ export default function LandingPage() {
       <style dangerouslySetInnerHTML={{
         __html: `
         video::cue {
-          color: ${isPremium ? captionColor : '#F5C542'} !important;
+          color: ${isPremium ? captionColor : '#FACC15'} !important;
           font-family: ${isPremium ? `'${captionFont}', sans-serif` : `'Inter', 'Segoe UI', sans-serif`} !important;
-          font-size: ${isPremium ? parseInt(captionSize, 10) : 42}px !important;
+          /* 🟢 FIX: Free Preview CSS එකේ සයිස් එක 20px කලා */
+          font-size: ${isPremium ? parseInt(captionSize, 10) : 20}px !important;
           font-weight: 800 !important;
           text-transform: none !important;
           background-color: rgba(0, 0, 0, 0.25) !important;
@@ -487,7 +505,7 @@ export default function LandingPage() {
                     {uploadStatus === 'error' && (
                       <div className="mt-8 flex items-center gap-2 rounded-2xl border border-red-400/20 bg-red-400/10 px-5 py-3 text-sm font-medium text-red-200">
                         <AlertCircle size={18} />
-                        Processing failed. Server timeout or file limit exceeded. Try a shorter video.
+                        Processing failed. Please try a shorter video.
                       </div>
                     )}
                   </div>
@@ -570,8 +588,8 @@ export default function LandingPage() {
                       <div className="flex flex-col gap-2.5">
                         <label className="text-xs font-bold uppercase tracking-[0.15em] text-white/50">Scale</label>
                         <div className="flex items-center gap-3 h-10 bg-black/40 px-3 rounded-xl border border-white/10">
-                          <input type="range" min="20" max="60" value={isPremium ? captionSize : '42'} onChange={(e) => { if (isPremium) setCaptionSize(e.target.value); }} className="w-full accent-violet-400" />
-                          <span className="text-xs font-bold text-white/70 w-8 text-right">{isPremium ? captionSize : '42'}px</span>
+                          <input type="range" min="20" max="60" value={isPremium ? captionSize : '20'} onChange={(e) => { if (isPremium) setCaptionSize(e.target.value); }} className="w-full accent-violet-400" />
+                          <span className="text-xs font-bold text-white/70 w-8 text-right">{isPremium ? captionSize : '20'}px</span>
                         </div>
                       </div>
                       <div className="flex flex-col gap-2.5">
