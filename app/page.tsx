@@ -401,21 +401,21 @@ export default function LandingPage() {
             className="mx-auto max-w-4xl text-center"
           >
             <span className="inline-flex items-center rounded-full border border-violet-400/20 bg-violet-400/10 px-4 py-1.5 text-xs font-medium tracking-wide text-violet-200 backdrop-blur-md">
-              AI-Powered Video Transcription
+              <Zap size={14} className="mr-1.5 text-violet-400" /> The Ultimate AI Caption Generator
             </span>
 
             <h1 className="mt-6 text-5xl font-bold tracking-tight text-white md:text-7xl">
-              Transform raw footage into viral social assets.
+              Add Viral AI Captions to <br/> Your Videos in Seconds.
             </h1>
 
-            <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-white/65 md:text-lg">
-              Leverage AI to generate perfectly synced, cinematic subtitles. Upgrade your workflow with dynamic hooks and premium styling designed for modern creators.
+            <p className="mx-auto mt-6 max-w-2xl text-base leading-7 text-white/65 md:text-lg">
+              Upload any video and let AI automatically generate perfectly synced, highly engaging subtitles. Customize fonts, colors, and layout to match your personal brand instantly.
             </p>
 
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3 text-sm text-white/70 font-medium">
-              <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 backdrop-blur-md">Fast Processing</span>
-              <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 backdrop-blur-md">Studio Grade Export</span>
-              <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 backdrop-blur-md">Full Customization</span>
+              <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 backdrop-blur-md flex items-center gap-1.5"><CheckCircle size={14} className="text-emerald-400"/> 99% Accuracy</span>
+              <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 backdrop-blur-md flex items-center gap-1.5"><CheckCircle size={14} className="text-emerald-400"/> Auto-Highlighting</span>
+              <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 backdrop-blur-md flex items-center gap-1.5"><CheckCircle size={14} className="text-emerald-400"/> Pro Export</span>
             </div>
           </motion.section>
 
