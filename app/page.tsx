@@ -13,14 +13,12 @@ export default function LandingPage() {
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'success' | 'error' | 'processing'>('idle');
 
   const [subtitles, setSubtitles] = useState<string>("");
-  // 🟢 State for Marketing Insights
   const [marketingData, setMarketingData] = useState<{audience?: string, title?: string, platforms?: string[], hashtags?: string[]} | null>(null);
   
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [cloudSubId, setCloudSubId] = useState<string | null>(null);
   const [vidDimensions, setVidDimensions] = useState({ w: 1080, h: 1920 }); 
-  const [renderedPlayerDimensions, setRenderedPlayerDimensions] = useState({ w: 0, h: 0 }); 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const cloudinaryUploadAbortRef = useRef<AbortController | null>(null);
   
@@ -36,31 +34,12 @@ export default function LandingPage() {
   const [captionSize, setCaptionSize] = useState("42");
   const [captionPosition, setCaptionPosition] = useState("south");
 
-  const countGraphemes = useCallback((text: string) => {
-    if (typeof Intl !== 'undefined' && 'Segmenter' in Intl) {
-      const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
-      return Array.from(segmenter.segment(text)).length;
-    }
-    return Array.from(text).length;
-  }, []);
-
-  const updateRenderedPlayerSize = useCallback(() => {
-    const videoEl = videoRef.current;
-    if (!videoEl) return;
-    const nextW = videoEl.clientWidth;
-    const nextH = videoEl.clientHeight;
-    if (nextW > 0 && nextH > 0) {
-      setRenderedPlayerDimensions({ w: nextW, h: nextH });
-    }
-  }, []);
-
   const handleVideoLoadedMetadata = useCallback((e: React.SyntheticEvent<HTMLVideoElement>) => {
     const videoEl = e.currentTarget;
     if (videoEl.videoWidth > 0 && videoEl.videoHeight > 0) {
       setVidDimensions({ w: videoEl.videoWidth, h: videoEl.videoHeight });
     }
-    updateRenderedPlayerSize();
-  }, [updateRenderedPlayerSize]);
+  }, []);
 
   const getLinePercentForPosition = useCallback((position: string) => {
     if (position === 'north') return 12;
@@ -68,51 +47,58 @@ export default function LandingPage() {
     return 88;
   }, []);
 
-  const wrapCueText = useCallback((text: string, maxCharsPerLine: number) => {
+  // 🟢 FIX 1: "Chad" Style Fixed Wrapping (අකුරු 22න් පේළිය කඩනවා - TikTok Style)
+  const wrapCueText = useCallback((text: string) => {
     const words = text.trim().split(/\s+/).filter(Boolean);
     if (words.length === 0) return text;
+    
     const lines: string[] = [];
     let currentLine = '';
+    const maxChars = 22; // ලස්සනට පේන්න ගාණට කඩනවා
+    
     for (const word of words) {
-      const nextLine = currentLine ? `${currentLine} ${word}` : word;
-      if (countGraphemes(nextLine) <= maxCharsPerLine || countGraphemes(currentLine) === 0) {
-        currentLine = nextLine;
+      if ((currentLine + word).length > maxChars && currentLine.length > 0) {
+        lines.push(currentLine.trim());
+        currentLine = word + ' ';
       } else {
-        lines.push(currentLine);
-        currentLine = word;
+        currentLine += word + ' ';
       }
     }
-    if (currentLine) lines.push(currentLine);
+    if (currentLine) lines.push(currentLine.trim());
     return lines.join('\n');
-  }, [countGraphemes]);
+  }, []);
 
+  // 🟢 FIX 2: VTT Builder එක ලේසි කළා (බොරු Math අයින් කළා)
   const buildStyledVtt = useCallback((rawVtt: string) => {
     const activePosition = isPremium ? captionPosition : 'south';
     const linePercent = getLinePercentForPosition(activePosition);
-    const cssFontSize = isPremium ? parseInt(captionSize, 10) : 35;
-    const usableWidth = Math.max(240, renderedPlayerDimensions.w * 0.9);
-    const estimatedCharWidth = Math.max(8, cssFontSize * 0.56);
-    const maxCharsPerLine = Math.max(10, Math.min(42, Math.floor(usableWidth / estimatedCharWidth)));
+
     const sections = rawVtt.split(/\r?\n\r?\n/);
     const styledSections = sections.map((section) => {
       const lines = section.split(/\r?\n/);
       if (lines.length === 0) return section;
+
       const timingIndex = lines.findIndex((line) => line.includes('-->'));
       if (timingIndex === -1) return section;
+
       const timingLine = lines[timingIndex];
       const cueTextLines = lines.slice(timingIndex + 1).filter((line) => line.trim() !== '');
       if (cueTextLines.length === 0) return section;
+
       const cueText = cueTextLines.join(' ');
-      const wrappedCueText = wrapCueText(cueText, maxCharsPerLine);
-      const withSettings = `${timingLine} line:${linePercent}% position:50% size:92% align:middle`;
+      const wrappedCueText = wrapCueText(cueText); // අර අලුත් 22-char limit එකෙන් කඩනවා
+      
+      const withSettings = `${timingLine} line:${linePercent}% position:50% align:center`;
+
       return [
         ...lines.slice(0, timingIndex),
         withSettings,
         wrappedCueText,
       ].join('\n');
     });
+
     return styledSections.join('\n\n');
-  }, [captionPosition, captionSize, getLinePercentForPosition, isPremium, renderedPlayerDimensions.w, wrapCueText]);
+  }, [captionPosition, isPremium, getLinePercentForPosition, wrapCueText]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -135,7 +121,7 @@ export default function LandingPage() {
         setUploadStatus('idle');
         setUploadProgress(0);
         setSubtitles("");
-        setMarketingData(null); // Reset marketing
+        setMarketingData(null);
         setVideoUrl(null);
         setDownloadUrl(null);
         setCloudSubId(null);
@@ -196,7 +182,6 @@ export default function LandingPage() {
             if (aiData.subtitles) {
               setSubtitles(aiData.subtitles);
               setEditedSubtitles(aiData.subtitles);
-              // 🟢 Set Marketing Data
               if(aiData.marketing) {
                 setMarketingData(aiData.marketing);
               }
@@ -261,62 +246,47 @@ export default function LandingPage() {
     }
   };
 
+  // 🟢 FIX 3: Perfect Resolution-Based Font Scaling
   const updateCloudinaryUrl = (
     vidUrl: string, subId: string, color: string, font: string, cssFontSize: number, position: string,
-    nativeDimensions: { w: number, h: number }, renderedDimensions: { w: number, h: number }
+    nativeDimensions: { w: number, h: number }
   ) => {
     const activeColor = isPremium ? color : '#FACC15';
     const activeFont = isPremium ? font : 'Arial';
-    const activeCssFontSize = isPremium ? cssFontSize : 35;
+    const activeCssFontSize = isPremium ? cssFontSize : 42;
     const activePosition = isPremium ? position : 'south';
-    const renderedPlayerWidth = renderedDimensions.w;
-    const nativeVideoWidth = nativeDimensions.w;
-    const nativeVideoHeight = nativeDimensions.h;
 
-    const widthRatio = renderedPlayerWidth > 0 ? nativeVideoWidth / renderedPlayerWidth : 1;
-    const cloudinaryParityFactor = 0.78;
-    const cloudFontSize = Math.max(12, Math.round(activeCssFontSize * widthRatio * cloudinaryParityFactor));
+    // බ්‍රවුසරේ Player එකේ සයිස් එක අමතක කරලා, වීඩියෝ එකේ ඔරිජිනල් සයිස් එකට සාපේක්ෂව ගුණ කරනවා
+    const nativeW = nativeDimensions.w > 0 ? nativeDimensions.w : 1080;
+    const nativeH = nativeDimensions.h > 0 ? nativeDimensions.h : 1920;
+
+    // 1080px වීඩියෝ එකකට සාපේක්ෂව Scale වෙනවා
+    const scaleFactor = nativeW / 600; 
+    const cloudFontSize = Math.max(18, Math.round(activeCssFontSize * scaleFactor));
     const borderThickness = Math.max(2, Math.round(cloudFontSize / 12));
+    
     const cleanColor = activeColor.replace('#', '');
     const linePercent = getLinePercentForPosition(activePosition);
     let gravity = 'south';
-    let yOffset = Math.round(nativeVideoHeight * ((100 - linePercent) / 100)).toString();
+    let yOffset = Math.round(nativeH * ((100 - linePercent) / 100)).toString();
 
     if (isPremium) {
       if (activePosition === 'north') {
         gravity = 'north';
-        yOffset = Math.round(nativeVideoHeight * (linePercent / 100)).toString();
+        yOffset = Math.round(nativeH * (linePercent / 100)).toString();
       } else if (activePosition === 'center') {
         gravity = 'center';
         yOffset = '0';
       } else {
         gravity = 'south';
-        yOffset = Math.round(nativeVideoHeight * ((100 - linePercent) / 100)).toString();
+        yOffset = Math.round(nativeH * ((100 - linePercent) / 100)).toString();
       }
     }
+
     const magicString = `/upload/fl_attachment:ViralFlow_Clip/l_subtitles:${activeFont}_${cloudFontSize}:${subId},co_rgb:${cleanColor},bo_${borderThickness}px_solid_black,g_${gravity},y_${yOffset}/`;
     const newBurnInUrl = vidUrl.replace('/upload/', magicString);
     setDownloadUrl(newBurnInUrl);
   };
-
-  useEffect(() => {
-    const videoEl = videoRef.current;
-    if (!videoEl) return;
-    updateRenderedPlayerSize();
-    if (typeof ResizeObserver === 'undefined') {
-      const onResize = () => updateRenderedPlayerSize();
-      window.addEventListener('resize', onResize);
-      return () => window.removeEventListener('resize', onResize);
-    }
-    const observer = new ResizeObserver(() => updateRenderedPlayerSize());
-    observer.observe(videoEl);
-    const onResize = () => updateRenderedPlayerSize();
-    window.addEventListener('resize', onResize);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener('resize', onResize);
-    };
-  }, [videoUrl, updateRenderedPlayerSize]);
 
   useEffect(() => {
     if (!subtitles || !videoUrl) return;
@@ -338,14 +308,14 @@ export default function LandingPage() {
     const url = URL.createObjectURL(blob);
     setVttPreviewUrl(url);
     if (videoUrl && cloudSubId) {
-      const cssFontSize = isPremium ? parseInt(captionSize, 10) : 35;
+      const cssFontSize = isPremium ? parseInt(captionSize, 10) : 42;
       const activePosition = isPremium ? captionPosition : 'south';
       updateCloudinaryUrl(
-        videoUrl, cloudSubId, captionColor, captionFont, cssFontSize, activePosition, vidDimensions, renderedPlayerDimensions
+        videoUrl, cloudSubId, captionColor, captionFont, cssFontSize, activePosition, vidDimensions
       );
     }
     return () => URL.revokeObjectURL(url);
-  }, [subtitles, captionColor, captionFont, captionSize, captionPosition, isPremium, videoUrl, cloudSubId, vidDimensions, renderedPlayerDimensions, buildStyledVtt]);
+  }, [subtitles, captionColor, captionFont, captionSize, captionPosition, isPremium, videoUrl, cloudSubId, vidDimensions, buildStyledVtt]);
 
   const handleSaveCaptions = async () => {
     if (!videoUrl) return;
@@ -379,12 +349,14 @@ export default function LandingPage() {
         video::cue {
           color: ${isPremium ? captionColor : '#F5C542'} !important;
           font-family: ${isPremium ? `'${captionFont}', sans-serif` : `'Inter', 'Segoe UI', sans-serif`} !important;
-          font-size: ${isPremium ? parseInt(captionSize, 10) : 34}px !important;
-          font-weight: 700 !important;
+          font-size: ${isPremium ? parseInt(captionSize, 10) : 42}px !important;
+          font-weight: 800 !important;
           text-transform: none !important;
-          background-color: rgba(0, 0, 0, 0.22) !important;
-          text-shadow: 0 2px 12px rgba(0, 0, 0, 0.35) !important;
-          letter-spacing: 0.01em !important;
+          background-color: rgba(0, 0, 0, 0.25) !important;
+          text-shadow: 0 3px 15px rgba(0, 0, 0, 0.5) !important;
+          letter-spacing: 0.02em !important;
+          white-space: pre-wrap !important;
+          line-height: 1.3 !important;
         }
       `}} />
 
@@ -529,38 +501,105 @@ export default function LandingPage() {
               initial={{ opacity: 0, y: 18 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.08 }}
-              className="mt-12 grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.75fr)]"
+              className="mt-12 grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.75fr)] items-start"
             >
-              <div className="rounded-[28px] border border-white/10 bg-white/5 p-4 shadow-[0_0_60px_rgba(15,23,42,0.35)] backdrop-blur-md">
-                <div className="rounded-[24px] border border-white/10 bg-[#070b17]/90 p-3 md:p-4">
-                  <div className="flex w-full items-center justify-center overflow-hidden rounded-[20px] border border-white/10 bg-black shadow-[0_0_40px_rgba(168,85,247,0.12)]">
-                    <video
-                      ref={videoRef}
-                      controls
-                      controlsList="nodownload"
-                      autoPlay
-                      style={{ aspectRatio: `${vidDimensions.w} / ${vidDimensions.h}` }} 
-                      className="max-h-[500px] w-auto max-w-full object-contain" 
-                      crossOrigin="anonymous"
-                      onLoadedMetadata={handleVideoLoadedMetadata}
-                    >
-                      <source src={videoUrl} type="video/mp4" />
-                      {vttPreviewUrl && (
-                        <track
-                          label="English Captions"
-                          kind="subtitles"
-                          srcLang="en"
-                          src={vttPreviewUrl}
-                          default
-                        />
-                      )}
-                    </video>
+              
+              <div className="flex flex-col gap-6 h-fit lg:sticky lg:top-24">
+                <div className="rounded-[28px] border border-white/10 bg-white/5 p-4 shadow-[0_0_60px_rgba(15,23,42,0.35)] backdrop-blur-md">
+                  <div className="rounded-[24px] border border-white/10 bg-[#070b17]/90 p-3 md:p-4">
+                    <div className="flex w-full items-center justify-center overflow-hidden rounded-[20px] border border-white/10 bg-black shadow-[0_0_40px_rgba(168,85,247,0.12)]">
+                      <video
+                        ref={videoRef}
+                        controls
+                        controlsList="nodownload"
+                        autoPlay
+                        style={{ aspectRatio: `${vidDimensions.w} / ${vidDimensions.h}` }} 
+                        className="max-h-[500px] w-auto max-w-full object-contain" 
+                        crossOrigin="anonymous"
+                        onLoadedMetadata={handleVideoLoadedMetadata}
+                      >
+                        <source src={videoUrl} type="video/mp4" />
+                        {vttPreviewUrl && (
+                          <track
+                            label="English Captions"
+                            kind="subtitles"
+                            srcLang="en"
+                            src={vttPreviewUrl}
+                            default
+                          />
+                        )}
+                      </video>
+                    </div>
                   </div>
+                </div>
+
+                <div className="relative overflow-hidden rounded-[28px] border border-amber-400/20 bg-[#0a0a0a]/80 shadow-[0_0_60px_rgba(234,179,8,0.05)] backdrop-blur-md">
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(250,204,21,0.1),transparent_50%)] pointer-events-none" />
+
+                  <div className="p-5 border-b border-white/5 relative z-10 flex justify-between items-center">
+                    <div>
+                      <div className="flex items-center gap-2 text-amber-300 mb-0.5">
+                        <Crown size={16} />
+                        <span className="text-xs font-bold uppercase tracking-[0.15em]">Pro Styling</span>
+                      </div>
+                    </div>
+                    {isPremium ? (
+                      <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">Active</span>
+                    ) : (
+                      <button onClick={handleUpgradeClick} className="bg-gradient-to-r from-amber-300 to-amber-500 text-black px-4 py-1.5 rounded-full text-xs font-bold hover:scale-105 transition shadow-[0_0_15px_rgba(250,204,21,0.4)]">
+                        Unlock PRO
+                      </button>
+                    )}
+                  </div>
+
+                  <div className={`p-6 relative z-10 ${!isPremium ? 'opacity-30 blur-[2px] pointer-events-none' : ''}`}>
+                    <div className="grid grid-cols-2 gap-5">
+                      <div className="flex flex-col gap-2.5">
+                        <label className="text-xs font-bold uppercase tracking-[0.15em] text-white/50 flex items-center gap-1.5"><Palette size={14}/> Color</label>
+                        <input type="color" value={captionColor} onChange={(e) => setCaptionColor(e.target.value)} className="h-10 w-full cursor-pointer rounded-xl border border-white/10 bg-transparent p-1" />
+                      </div>
+                      <div className="flex flex-col gap-2.5">
+                        <label className="text-xs font-bold uppercase tracking-[0.15em] text-white/50 flex items-center gap-1.5"><Type size={14}/> Font</label>
+                        <select value={isPremium ? captionFont : 'Arial'} onChange={(e) => { if (isPremium) setCaptionFont(e.target.value); }} className="h-10 rounded-xl border border-white/10 bg-black/40 px-3 text-sm font-medium text-white outline-none transition focus:border-violet-400/50 appearance-none">
+                          <option value="Impact">Impact (Cinematic)</option>
+                          <option value="Arial">Arial (Clean)</option>
+                          <option value="Roboto">Roboto (Modern)</option>
+                          <option value="Courier">Courier (Typewriter)</option>
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-2.5">
+                        <label className="text-xs font-bold uppercase tracking-[0.15em] text-white/50">Scale</label>
+                        <div className="flex items-center gap-3 h-10 bg-black/40 px-3 rounded-xl border border-white/10">
+                          <input type="range" min="20" max="60" value={isPremium ? captionSize : '42'} onChange={(e) => { if (isPremium) setCaptionSize(e.target.value); }} className="w-full accent-violet-400" />
+                          <span className="text-xs font-bold text-white/70 w-8 text-right">{isPremium ? captionSize : '42'}px</span>
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-2.5">
+                        <label className="text-xs font-bold uppercase tracking-[0.15em] text-white/50 flex items-center gap-1.5"><MoveVertical size={14}/> Layout</label>
+                        <select value={isPremium ? captionPosition : 'south'} onChange={(e) => { if (isPremium) setCaptionPosition(e.target.value); }} className="h-10 rounded-xl border border-white/10 bg-black/40 px-3 text-sm font-medium text-white outline-none transition focus:border-violet-400/50 appearance-none">
+                          <option value="south">Bottom Action Safe</option>
+                          <option value="center">Center Viewport</option>
+                          <option value="north">Top Title Safe</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {!isPremium && (
+                    <div className="absolute inset-x-0 bottom-0 top-[70px] z-20 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm rounded-b-[28px]">
+                      <Lock size={24} className="text-amber-300 mb-2" />
+                      <p className="text-sm font-bold text-white mb-3">Custom Styling Locked</p>
+                      <button onClick={handleUpgradeClick} className="rounded-full bg-gradient-to-r from-amber-300 to-amber-500 px-6 py-2 text-xs font-bold text-black shadow-[0_0_20px_rgba(250,204,21,0.3)] transition hover:scale-105">
+                        Upgrade to Use
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
+
               <div className="flex flex-col gap-6">
-                {/* 🟢 NEW: AI Growth Strategy Insights Section */}
+                
                 {marketingData && (
                   <div className="relative overflow-hidden rounded-[28px] border border-violet-500/30 bg-gradient-to-br from-violet-500/10 to-transparent p-6 shadow-[0_0_60px_rgba(139,92,246,0.1)] backdrop-blur-md">
                     <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(139,92,246,0.15),transparent_60%)]" />
@@ -658,156 +697,47 @@ export default function LandingPage() {
                   </div>
                 </div>
 
-                <div className="relative overflow-hidden rounded-[28px] border border-amber-400/20 bg-gradient-to-br from-white/8 to-white/5 p-6 shadow-[0_0_60px_rgba(234,179,8,0.08)] backdrop-blur-md">
-                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(250,204,21,0.14),transparent_55%)]" />
-                  <div className="relative z-10">
-                    <div className="flex items-center gap-2 text-amber-300">
-                      <Crown size={18} />
-                      <span className="text-sm font-bold uppercase tracking-[0.15em]">Pro Styling Suite</span>
-                    </div>
-
-                    <h3 className="mt-3 text-xl font-bold text-white">Advanced Customization</h3>
-                    <p className="mt-2 text-sm leading-6 text-white/70">
-                      Take control of your brand identity with custom typography, precise positioning, and brand color injection.
-                    </p>
-
-                    {!isPremium ? (
-                      <div className="mt-6 rounded-[24px] border border-amber-400/20 bg-black/30 p-5 backdrop-blur-md">
-                        <div className="flex items-start gap-4">
-                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-amber-400/20 bg-amber-400/10 text-amber-300">
-                            <Lock size={20} />
-                          </div>
-                          <div>
-                            <div className="text-sm font-bold text-white">Unlock Full Suite</div>
-                            <div className="mt-1 text-sm leading-6 text-white/60">
-                              Access premium fonts, color palettes, and cinematic layouts.
-                            </div>
-                          </div>
-                        </div>
-
-                        <button
-                          onClick={handleUpgradeClick}
-                          className="mt-5 inline-flex w-full items-center justify-center rounded-full bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 px-5 py-3.5 text-sm font-bold text-black shadow-[0_0_30px_rgba(250,204,21,0.22)] transition hover:scale-[1.02] hover:shadow-[0_0_40px_rgba(250,204,21,0.28)]"
-                        >
-                          Unlock PRO Features
-                        </button>
-                      </div>
+                <div className="rounded-[28px] border border-white/10 bg-white/5 p-6 backdrop-blur-md flex flex-col items-center text-center">
+                  {downloadUrl && (
+                    isSignedIn ? (
+                      <a
+                        href={downloadUrl}
+                        download
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-6 py-4 text-sm font-bold text-black shadow-[0_0_40px_rgba(255,255,255,0.2)] transition hover:scale-[1.02] hover:bg-gray-100"
+                      >
+                        <Download size={18} /> Export Final Video
+                      </a>
                     ) : (
-                      <div className="mt-6 grid grid-cols-2 gap-4">
-                        <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-center">
-                          <div className="text-xs text-white/50 uppercase tracking-widest font-semibold">Subscription</div>
-                          <div className="mt-1 text-sm font-bold text-emerald-400">Active PRO Plan</div>
-                        </div>
-                        <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-center">
-                          <div className="text-xs text-white/50 uppercase tracking-widest font-semibold">Export Quality</div>
-                          <div className="mt-1 text-sm font-bold text-white">Studio Grade</div>
-                        </div>
+                      <div className="w-full">
+                        <h4 className="text-lg font-bold text-white mb-2">Ready to Export?</h4>
+                        <p className="text-sm text-white/60 mb-5 max-w-sm mx-auto">Create a free account to download your video and save your workflow.</p>
+                        <SignInButton mode="modal">
+                          <button className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-6 py-3.5 text-sm font-bold text-black shadow-lg transition hover:scale-[1.02]">
+                            <Download size={18} /> Sign up to Download
+                          </button>
+                        </SignInButton>
                       </div>
-                    )}
-                  </div>
+                    )
+                  )}
+
+                  <button
+                    onClick={() => {
+                      setFile(null);
+                      setVideoUrl(null);
+                      setDownloadUrl(null);
+                      setUploadStatus('idle');
+                      setUploadProgress(0);
+                      setSubtitles('');
+                      setMarketingData(null);
+                      setEditedSubtitles('');
+                      setCloudSubId(null);
+                      setIsEditing(false);
+                    }}
+                    className="mt-4 py-2 text-sm font-medium text-white/40 transition hover:text-white"
+                  >
+                    Clear and start a new project
+                  </button>
                 </div>
-
-                <div className={`rounded-[28px] border border-white/10 bg-white/5 p-6 backdrop-blur-md ${!isPremium ? 'opacity-50 pointer-events-none' : ''}`}>
-                  <div className="grid grid-cols-2 gap-5">
-                    <div className="flex flex-col gap-2.5">
-                      <label className="text-xs font-bold uppercase tracking-[0.15em] text-white/50 flex items-center gap-1.5"><Palette size={14}/> Brand Color</label>
-                      <input
-                        type="color"
-                        value={captionColor}
-                        onChange={(e) => setCaptionColor(e.target.value)}
-                        className="h-12 w-full cursor-pointer rounded-2xl border border-white/10 bg-transparent p-1"
-                      />
-                    </div>
-
-                    <div className="flex flex-col gap-2.5">
-                      <label className="text-xs font-bold uppercase tracking-[0.15em] text-white/50 flex items-center gap-1.5"><Type size={14}/> Typography</label>
-                      <select
-                        value={isPremium ? captionFont : 'Arial'}
-                        onChange={(e) => {
-                          if (isPremium) setCaptionFont(e.target.value);
-                        }}
-                        className="h-12 rounded-2xl border border-white/10 bg-black/40 px-4 text-sm font-medium text-white outline-none transition focus:border-violet-400/50 appearance-none"
-                      >
-                        <option value="Impact">Impact (Cinematic)</option>
-                        <option value="Arial">Arial (Clean)</option>
-                        <option value="Roboto">Roboto (Modern)</option>
-                        <option value="Courier">Courier (Typewriter)</option>
-                      </select>
-                    </div>
-
-                    <div className="flex flex-col gap-2.5">
-                      <label className="text-xs font-bold uppercase tracking-[0.15em] text-white/50">Scale</label>
-                      <div className="flex items-center gap-3 h-12 bg-black/40 px-4 rounded-2xl border border-white/10">
-                        <input
-                          type="range"
-                          min="20"
-                          max="60"
-                          value={isPremium ? captionSize : '42'}
-                          onChange={(e) => {
-                            if (isPremium) setCaptionSize(e.target.value);
-                          }}
-                          className="w-full accent-violet-400"
-                        />
-                        <span className="text-xs font-bold text-white/70 w-8 text-right">{isPremium ? captionSize : '42'}px</span>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col gap-2.5">
-                      <label className="text-xs font-bold uppercase tracking-[0.15em] text-white/50 flex items-center gap-1.5"><MoveVertical size={14}/> Layout</label>
-                      <select
-                        value={isPremium ? captionPosition : 'south'}
-                        onChange={(e) => {
-                          if (isPremium) setCaptionPosition(e.target.value);
-                        }}
-                        className="h-12 rounded-2xl border border-white/10 bg-black/40 px-4 text-sm font-medium text-white outline-none transition focus:border-violet-400/50 appearance-none"
-                      >
-                        <option value="south">Bottom Action Safe</option>
-                        <option value="center">Center Viewport</option>
-                        <option value="north">Top Title Safe</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                {downloadUrl && (
-                  isSignedIn ? (
-                    <a
-                      href={downloadUrl}
-                      download
-                      className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-6 py-4 text-sm font-bold text-black shadow-[0_0_40px_rgba(255,255,255,0.2)] transition hover:scale-[1.02] hover:bg-gray-100"
-                    >
-                      <Download size={18} /> Export Final Video
-                    </a>
-                  ) : (
-                    <div className="mt-4 w-full text-center bg-white/5 rounded-3xl p-6 border border-white/10">
-                      <h4 className="text-lg font-bold text-white mb-2">Ready to Export?</h4>
-                      <p className="text-sm text-white/60 mb-5 max-w-sm mx-auto">Create a free account to download your watermarked video and save your workflow.</p>
-                      <SignInButton mode="modal">
-                        <button className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-6 py-3.5 text-sm font-bold text-black shadow-lg transition hover:scale-[1.02]">
-                          <Download size={18} /> Sign up to Download
-                        </button>
-                      </SignInButton>
-                    </div>
-                  )
-                )}
-
-                <button
-                  onClick={() => {
-                    setFile(null);
-                    setVideoUrl(null);
-                    setDownloadUrl(null);
-                    setUploadStatus('idle');
-                    setUploadProgress(0);
-                    setSubtitles('');
-                    setMarketingData(null);
-                    setEditedSubtitles('');
-                    setCloudSubId(null);
-                    setIsEditing(false);
-                  }}
-                  className="mt-2 w-full py-2 text-sm font-medium text-white/40 transition hover:text-white"
-                >
-                  Clear and start a new project
-                </button>
               </div>
             </motion.section>
           )}
