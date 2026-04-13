@@ -7,7 +7,7 @@ const inter = Inter({ subsets: ["latin"] });
 
 // 🟢 Ultimate SEO & Social Media Meta Tags with Real Domain
 export const metadata: Metadata = {
-  metadataBase: new URL("https://viralflow-ai-tawny.vercel.app"),
+  metadataBase: new URL("https://tryviralflow.vercel.app"),
   title: "ViralFlow AI | The Ultimate AI Caption Generator",
   description: "Transform raw footage into viral social assets. Let AI auto-generate perfectly synced, cinematic subtitles in seconds. Perfect for TikTok, Reels, and Shorts.",
   keywords: ["AI captions", "video subtitles", "viral video editor", "auto captions", "TikTok captions", "Reels editor", "shorts captions", "video transcription"],
@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "ViralFlow AI | Add Viral Captions to Videos in Seconds",
     description: "Transform raw footage into viral social assets. Auto-generate perfectly synced, cinematic subtitles in seconds.",
-    url: "https://viralflow-ai-tawny.vercel.app/", 
+    url: "https://tryviralflow.vercel.app/", 
     siteName: "ViralFlow AI",
     images: [
       {
