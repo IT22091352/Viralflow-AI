@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     // "speech_models" Array එකක් විදිහට දිය යුතුයි
     const transcript = await client.transcripts.transcribe({
       audio_url: videoUrl,
-      language_detection: true,
+      language_code: "si",
       speech_models: ["universal-2"], 
     });
 
