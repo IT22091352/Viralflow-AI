@@ -34,7 +34,7 @@ export default function ContactPage() {
             href="mailto:support@viralflow.ai" 
             className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-8 py-4 text-sm font-bold text-white shadow-[0_0_30px_rgba(168,85,247,0.25)] transition hover:scale-[1.02]"
           >
-            support@viralflow.ai
+            nexgynixsolutions@gmail.com
           </a>
         </div>
       </main>
