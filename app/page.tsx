@@ -426,13 +426,17 @@ export default function LandingPage() {
         <nav className="sticky top-0 z-50 border-b border-white/10 bg-[#050816]/70 backdrop-blur-md">
           <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 md:px-8">
             <div className="flex items-center gap-3 cursor-pointer">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-sm font-bold shadow-[0_0_30px_rgba(168,85,247,0.25)]">
-                V
-              </div>
+              {/* 🟢 අලුත් Logo එක මෙතනට දැම්මා */}
+              <img 
+                src="/logo.png" 
+                alt="ViralFlow Logo" 
+                className="h-10 w-auto object-contain drop-shadow-[0_0_15px_rgba(168,85,247,0.4)]" 
+              />
               <div>
                 <div className="text-sm font-bold tracking-[0.15em] text-white/90 uppercase">ViralFlow</div>
               </div>
             </div>
+
 
             <div className="flex items-center gap-4">
               {!isSignedIn ? (
@@ -874,7 +878,8 @@ export default function LandingPage() {
           <div className="mx-auto max-w-7xl px-6 md:px-8">
             <div className="flex flex-col md:flex-row justify-between items-center gap-6">
               <div className="flex items-center gap-2">
-                <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 text-[10px] font-bold">V</div>
+                {/* 🟢 අලුත් Logo Image එක (පොඩි සයිස්) */}
+                <img src="/logo.png" alt="ViralFlow Logo" className="h-6 w-auto object-contain" />
                 <span className="text-sm font-bold tracking-widest text-white/80 uppercase">ViralFlow AI</span>
               </div>
               
