@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { AssemblyAI } from 'assemblyai';
+import OpenAI, { toFile } from 'openai';
 
-const client = new AssemblyAI({
-  apiKey: process.env.ASSEMBLYAI_API_KEY!
+// 🚀 Initialize OpenAI
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
 export async function POST(req: NextRequest) {
@@ -13,33 +14,39 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No URL provided" }, { status: 400 });
     }
 
-    console.log("Sending Video URL directly to AssemblyAI...");
+    console.log("Extracting audio from Cloudinary...");
+    
+    // Cloudinary Video URL එක MP3 Audio URL එකක් බවට පත් කිරීම (AI එකට ලේසි වෙන්න සහ Data ඉතුරු වෙන්න)
+    const audioUrl = videoUrl.replace(/\.[^/.]+$/, ".mp3");
+    
+    // Audio File එක Buffer එකක් විදිහට Download කරගැනීම
+    const audioResponse = await fetch(audioUrl);
+    if (!audioResponse.ok) throw new Error("Failed to fetch audio from Cloudinary");
+    
+    const arrayBuffer = await audioResponse.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    
+    // OpenAI එකට යවන්න පුළුවන් File Object එකක් හැදීම
+    const file = await toFile(buffer, 'audio.mp3', { type: 'audio/mp3' });
 
-    // 1. Cloudinary URL එක යවනවා
-    // "speech_models" Array එකක් විදිහට දිය යුතුයි
-    const transcript = await client.transcripts.transcribe({
-      audio_url: videoUrl,
-      language_code: "si",
-      speech_models: ["universal-2"], 
+    console.log("Sending to OpenAI Whisper for Sinhala Song Transcription...");
+
+    // 🔥 OpenAI Whisper API එකට යැවීම
+    const transcription = await openai.audio.transcriptions.create({
+      file: file,
+      model: "whisper-1",
+      language: "si", // අනිවාර්යයෙන්ම සිංහල (Sinhala) කියලා කියනවා
+      response_format: "vtt", // කෙලින්ම VTT format එකෙන්ම ඉල්ලනවා! (Magic!)
     });
 
-    if (transcript.status === 'error') {
-       throw new Error(transcript.error);
-    }
+    console.log("Transcription Complete!");
 
-    console.log("Transcription Complete! Generating VTT...");
-
-    // 2. VTT format එකෙන් Subtitles ටික ඉල්ලගමු (අලුත් ක්‍රමය)
-    const vtt = await client.transcripts.subtitles(transcript.id, "vtt");
-
-    console.log("AssemblyAI Success! ✅");
-
-    return NextResponse.json({ subtitles: vtt });
+    // OpenAI එකෙන් කෙලින්ම VTT format එක දෙන නිසා, අපිට අමුතුවෙන් VTT හදන්න ඕනේ නෑ. 
+    // කෙලින්ම ඒක UI එකට යවනවා!
+    return NextResponse.json({ subtitles: transcription });
 
   } catch (error: any) {
-    console.error("AssemblyAI Error:", error);
-    return NextResponse.json({ 
-      error: "Failed to generate subtitles. " + (error.message || "")
-    }, { status: 500 });
+    console.error("Transcription Error:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
