@@ -1,25 +1,24 @@
 "use client";
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Upload, Zap, Loader2, AlertCircle, Download, Edit3, X, Check, Crown, Palette, Type, MoveVertical, Lock } from 'lucide-react';
+import { Upload, Zap, Loader2, AlertCircle, Download, Edit3, Check, Crown, Palette, Type, MoveVertical, Lock } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { SignInButton, UserButton, useUser } from "@clerk/nextjs";
 
 export default function LandingPage() {
-  // 🟢 FIX: Clerk hooks called ONCE at the top
   const { isSignedIn, user } = useUser();
   
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'success' | 'error' | 'processing'>('idle');
-  
+
   // States for Video, Captions & Dimensions
   const [subtitles, setSubtitles] = useState<string>("");
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [cloudSubId, setCloudSubId] = useState<string | null>(null);
-  const [vidDimensions, setVidDimensions] = useState({ w: 1080, h: 1920 }); // Native video resolution
-  const [renderedPlayerDimensions, setRenderedPlayerDimensions] = useState({ w: 0, h: 0 }); // Rendered player size on screen
+  const [vidDimensions, setVidDimensions] = useState({ w: 1080, h: 1920 }); 
+  const [renderedPlayerDimensions, setRenderedPlayerDimensions] = useState({ w: 0, h: 0 }); 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const cloudinaryUploadAbortRef = useRef<AbortController | null>(null);
   
@@ -31,14 +30,22 @@ export default function LandingPage() {
   const [editedSubtitles, setEditedSubtitles] = useState<string>("");
   const [isUpdatingCaptions, setIsUpdatingCaptions] = useState(false);
 
-  // 💰 Business Model State - FIX: user is now defined before this line
+  // 💰 Business Model State
   const isPremium = user?.publicMetadata?.isPremium === true;
 
   // 👑 Premium Styling States
   const [captionColor, setCaptionColor] = useState("#FACC15");
-  const [captionFont, setCaptionFont] = useState("Impact");
+  const [captionFont, setCaptionFont] = useState("Arial"); 
   const [captionSize, setCaptionSize] = useState("42");
   const [captionPosition, setCaptionPosition] = useState("south");
+
+  const countGraphemes = useCallback((text: string) => {
+    if (typeof Intl !== 'undefined' && 'Segmenter' in Intl) {
+      const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+      return Array.from(segmenter.segment(text)).length;
+    }
+    return Array.from(text).length;
+  }, []);
 
   const updateRenderedPlayerSize = useCallback(() => {
     const videoEl = videoRef.current;
@@ -77,7 +84,7 @@ export default function LandingPage() {
 
     for (const word of words) {
       const nextLine = currentLine ? `${currentLine} ${word}` : word;
-      if (nextLine.length <= maxCharsPerLine || currentLine.length === 0) {
+      if (countGraphemes(nextLine) <= maxCharsPerLine || countGraphemes(currentLine) === 0) {
         currentLine = nextLine;
       } else {
         lines.push(currentLine);
@@ -87,7 +94,7 @@ export default function LandingPage() {
 
     if (currentLine) lines.push(currentLine);
     return lines.join('\n');
-  }, []);
+  }, [countGraphemes]);
 
   const buildStyledVtt = useCallback((rawVtt: string) => {
     const activePosition = isPremium ? captionPosition : 'south';
@@ -169,7 +176,6 @@ export default function LandingPage() {
           const uploadData = JSON.parse(xhr.responseText);
           const uploadedVideoUrl = uploadData.secure_url;
           
-          // Capture Native Video Dimensions for Perfect Scaling
           setVidDimensions({ 
             w: uploadData.width || 1080, 
             h: uploadData.height || 1920 
@@ -177,12 +183,14 @@ export default function LandingPage() {
           
           setVideoUrl(uploadedVideoUrl);
           
+          setIsUploading(false); 
           setUploadStatus('processing');
+          
           try {
             const aiRes = await fetch('/api/process-video', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ videoUrl: uploadedVideoUrl }),
+              body: JSON.stringify({ videoUrl: uploadedVideoUrl, language: 'en' }), 
             });
             
             const aiData = await aiRes.json();
@@ -190,7 +198,7 @@ export default function LandingPage() {
               setSubtitles(aiData.subtitles);
               setEditedSubtitles(aiData.subtitles);
 
-              await uploadVttAndGenerateUrl(uploadedVideoUrl, aiData.subtitles);
+              await uploadVttAndGenerateUrl(aiData.subtitles);
               setUploadStatus('success');
             } else {
               setUploadStatus('error');
@@ -201,8 +209,8 @@ export default function LandingPage() {
           }
         } else {
           setUploadStatus('error');
+          setIsUploading(false);
         }
-        setIsUploading(false);
       };
 
       xhr.onerror = () => {
@@ -217,6 +225,15 @@ export default function LandingPage() {
       setIsUploading(false);
     }
   };
+
+  useEffect(() => {
+    if (!isPremium) {
+      setCaptionColor('#FACC15');
+      setCaptionFont('Arial');
+      setCaptionSize('42');
+      setCaptionPosition('south');
+    }
+  }, [isPremium]);
 
   const uploadVttAndGenerateUrl = async (vttText: string, signal?: AbortSignal) => {
     try {
@@ -245,11 +262,12 @@ export default function LandingPage() {
         setCloudSubId(subId);
       }
     } catch (vttErr) {
+      if (vttErr instanceof DOMException && vttErr.name === 'AbortError') return;
+      if (signal?.aborted) return;
       console.error("VTT Upload Error:", vttErr);
     }
   };
 
-  // 🔥 Proportional Scaling Engine
   const updateCloudinaryUrl = (
     vidUrl: string, 
     subId: string, 
@@ -260,17 +278,16 @@ export default function LandingPage() {
     nativeDimensions: { w: number, h: number },
     renderedDimensions: { w: number, h: number }
   ) => {
-    const activeColor = isPremium ? color : "#FACC15";
-    const activeFont = isPremium ? font : "Impact";
+    const activeColor = isPremium ? color : '#FACC15';
+    const activeFont = isPremium ? font : 'Arial';
     const activeCssFontSize = isPremium ? cssFontSize : 35;
+    const activePosition = isPremium ? position : 'south';
 
     const renderedPlayerWidth = renderedDimensions.w;
     const nativeVideoWidth = nativeDimensions.w;
     const nativeVideoHeight = nativeDimensions.h;
 
-    // Exact width ratio requested: nativeVideoWidth / renderedPlayerWidth
     const widthRatio = renderedPlayerWidth > 0 ? nativeVideoWidth / renderedPlayerWidth : 1;
-    // Cloudinary subtitle glyph metrics render larger than browser ::cue in most fonts, so apply a parity factor.
     const cloudinaryParityFactor = 0.78;
     const cloudFontSize = Math.max(12, Math.round(activeCssFontSize * widthRatio * cloudinaryParityFactor));
     
@@ -278,15 +295,15 @@ export default function LandingPage() {
 
     const cleanColor = activeColor.replace('#', '');
     
-    const linePercent = getLinePercentForPosition(position);
+    const linePercent = getLinePercentForPosition(activePosition);
     let gravity = 'south';
     let yOffset = Math.round(nativeVideoHeight * ((100 - linePercent) / 100)).toString();
 
     if (isPremium) {
-      if (position === 'north') {
+      if (activePosition === 'north') {
         gravity = 'north';
         yOffset = Math.round(nativeVideoHeight * (linePercent / 100)).toString();
-      } else if (position === 'center') {
+      } else if (activePosition === 'center') {
         gravity = 'center';
         yOffset = '0';
       } else {
@@ -348,7 +365,7 @@ export default function LandingPage() {
     if (!subtitles) return;
 
     const styledVtt = buildStyledVtt(subtitles);
-    const blob = new Blob([styledVtt], { type: 'text/vtt' });
+    const blob = new Blob([`\uFEFF${styledVtt}`], { type: 'text/vtt;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     setVttPreviewUrl(url);
 
@@ -378,300 +395,432 @@ export default function LandingPage() {
     setIsUpdatingCaptions(false);
   };
 
-  // 🟢 FIX: Clean Upgrade Function with proper checks
   const handleUpgradeClick = () => {
     if (!user) {
       alert("Please Sign In first to upgrade to PRO!");
       return; 
     }
     
-    // ඔයාගේ Lemon Squeezy Checkout Link එක මෙතන දාන්න
     const baseUrl = "https://nexgynix.lemonsqueezy.com/checkout/buy/4019e697-f418-430a-a596-031fc7ab56fb";
-    
-    // URL එකේ අගට ?checkout[custom][user_id]=... කියලා අමුණනවා
     const checkoutUrl = `${baseUrl}?checkout[custom][user_id]=${user.id}`;
     
     window.open(checkoutUrl, "_blank");
   };
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white selection:bg-purple-500/30">
-      
-      {/* 🟢 PROPORTIONAL CSS INJECTION FOR PERFECT WEB PREVIEW */}
+    <div className="relative min-h-screen overflow-hidden bg-[#050816] text-white selection:bg-violet-500/30">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute left-1/2 top-[-10rem] h-[28rem] w-[28rem] -translate-x-1/2 rounded-full bg-violet-500/15 blur-3xl" />
+        <div className="absolute right-[-8rem] top-24 h-72 w-72 rounded-full bg-cyan-400/10 blur-3xl" />
+        <div className="absolute bottom-0 left-[-6rem] h-80 w-80 rounded-full bg-fuchsia-500/10 blur-3xl" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.07)_1px,transparent_0)] [background-size:24px_24px] opacity-20" />
+      </div>
+
       <style dangerouslySetInnerHTML={{
         __html: `
         video::cue {
-          color: ${isPremium ? captionColor : '#FACC15'} !important;
-          font-family: '${isPremium ? captionFont : 'Impact'}', sans-serif !important;
-          font-size: ${isPremium ? parseInt(captionSize, 10) : 35}px !important;
-          font-weight: 900 !important;
-          text-transform: uppercase !important;
-          background-color: transparent !important;
-          text-shadow: 
-            3px 3px 0px #000000, 
-            -3px -3px 0px #000000, 
-            3px -3px 0px #000000, 
-            -3px 3px 0px #000000,
-            5px 5px 15px rgba(0, 0, 0, 0.8) !important;
+          color: ${isPremium ? captionColor : '#F5C542'} !important;
+          font-family: ${isPremium ? `'${captionFont}', sans-serif` : `'Inter', 'Segoe UI', sans-serif`} !important;
+          font-size: ${isPremium ? parseInt(captionSize, 10) : 34}px !important;
+          font-weight: 700 !important;
+          text-transform: none !important;
+          background-color: rgba(0, 0, 0, 0.22) !important;
+          text-shadow: 0 2px 12px rgba(0, 0, 0, 0.35) !important;
+          letter-spacing: 0.01em !important;
         }
       `}} />
 
-      {/* Navbar */}
-      <nav className="flex justify-between items-center px-8 py-6 border-b border-white/5 backdrop-blur-md sticky top-0 z-50">
-        <div className="text-xl font-bold tracking-tighter flex items-center gap-2">
-          <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center font-bold">V</div>
-          ViralFlow AI
-        </div>
-        
-        <div className="flex items-center gap-4">
-          {!isSignedIn ? (
-            <SignInButton mode="modal">
-              <button className="bg-white text-black px-5 py-2 rounded-full text-sm font-medium hover:bg-gray-200 transition">
-                Sign In
-              </button>
-            </SignInButton>
-          ) : (
-            <div className="flex items-center gap-4">
-               {isPremium && <span className="bg-yellow-500/20 text-yellow-500 text-xs font-bold px-3 py-1 rounded-full border border-yellow-500/50 flex items-center gap-1"><Crown size={12}/> PRO</span>}
-               <UserButton />
+      <div className="relative z-10">
+        <nav className="sticky top-0 z-50 border-b border-white/10 bg-[#050816]/70 backdrop-blur-md">
+          <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 md:px-8">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-sm font-semibold shadow-[0_0_30px_rgba(168,85,247,0.25)]">
+                V
+              </div>
+              <div>
+                <div className="text-sm font-semibold tracking-[0.24em] text-white/60 uppercase">ViralFlow AI</div>
+                <div className="text-sm text-white/80">AI Caption Studio</div>
+              </div>
             </div>
-          )}
-        </div>
-      </nav>
 
-      <main className="max-w-6xl mx-auto px-6 pt-20 pb-12 text-center">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-          <span className="px-4 py-1.5 rounded-full border border-purple-500/30 bg-purple-500/10 text-purple-400 text-xs font-medium inline-block mb-6">
-            Powered by AssemblyAI
-          </span>
-          <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-6 bg-gradient-to-b from-white to-gray-500 bg-clip-text text-transparent">
-            Viral Clips with <br /> "Chad" Captions
-          </h1>
-        </motion.div>
+            <div className="flex items-center gap-4">
+              {!isSignedIn ? (
+                <SignInButton mode="modal">
+                  <button className="bg-white text-black px-6 py-2.5 rounded-full text-sm font-bold shadow-lg hover:bg-gray-200 transition transform hover:scale-105">
+                    Sign In
+                  </button>
+                </SignInButton>
+              ) : (
+                <div className="flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-3 py-2 backdrop-blur-md">
+                  {isPremium && (
+                    <span className="flex items-center gap-1 rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-xs font-semibold text-amber-300">
+                      <Crown size={12} /> PRO
+                    </span>
+                  )}
+                  <UserButton />
+                </div>
+              )}
+            </div>
+          </div>
+        </nav>
 
-        <motion.div 
-          className="max-w-4xl mx-auto p-8 rounded-3xl border-2 border-dashed border-white/10 bg-white/5 backdrop-blur-sm hover:border-purple-500/40 transition-all relative overflow-hidden"
-        >
-          {!file && !isUploading && (
-            <input 
-              type="file" 
-              accept="video/*" 
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
-              onChange={handleFileChange}
-            />
+        <main className="mx-auto max-w-7xl px-6 pb-16 pt-12 md:px-8 md:pt-16">
+          <motion.section
+            initial={{ opacity: 0, y: 22 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: 'easeOut' }}
+            className="mx-auto max-w-4xl text-center"
+          >
+            <span className="inline-flex items-center rounded-full border border-violet-400/20 bg-violet-400/10 px-4 py-1.5 text-xs font-medium tracking-wide text-violet-200 backdrop-blur-md">
+              AI-Powered Viral Captions
+            </span>
+
+            <h1 className="mt-6 text-5xl font-semibold tracking-tight text-white md:text-7xl">
+              Turn videos into premium social assets.
+            </h1>
+
+            <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-white/65 md:text-lg">
+              Generate cinematic subtitles, dynamic video hooks, and studio-grade styling for creators who want a polished, high-converting caption workflow.
+            </p>
+
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-3 text-sm text-white/70">
+              <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 backdrop-blur-md">Cinematic Subtitles</span>
+              <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 backdrop-blur-md">Dynamic Video Hooks</span>
+              <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 backdrop-blur-md">Pro Studio Styling</span>
+            </div>
+          </motion.section>
+
+          {uploadStatus !== 'success' && (
+            <motion.section
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.55, delay: 0.08 }}
+              className="mx-auto mt-12 max-w-4xl"
+            >
+              <div className="rounded-[28px] border border-white/10 bg-white/5 p-4 shadow-[0_0_60px_rgba(15,23,42,0.35)] backdrop-blur-md md:p-5">
+                <div className="relative overflow-hidden rounded-[24px] border border-white/10 bg-[#070b17]/90 p-8 md:p-10">
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-violet-500/10 via-transparent to-cyan-400/10" />
+
+                  {!file && !isUploading && uploadStatus !== 'processing' && (
+                    <input
+                      type="file"
+                      accept="video/*"
+                      className="absolute inset-0 z-20 h-full w-full cursor-pointer opacity-0"
+                      onChange={handleFileChange}
+                    />
+                  )}
+
+                  <div className="relative z-10 flex flex-col items-center text-center">
+                    <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-white/10 bg-white/5 shadow-[0_0_30px_rgba(168,85,247,0.12)] backdrop-blur-md">
+                      {isUploading || uploadStatus === 'processing' ? (
+                        <Loader2 className="animate-spin text-violet-300" size={34} />
+                      ) : (
+                        <Upload className="text-violet-300" size={34} />
+                      )}
+                    </div>
+
+                    <h2 className="mt-6 text-2xl font-semibold tracking-tight text-white md:text-3xl">
+                      {file ? file.name : 'Upload a video to start'}
+                    </h2>
+
+                    <p className="mt-3 max-w-xl text-sm leading-6 text-white/60 md:text-base">
+                      Clean English transcription, premium subtitle styling, and a fast Cloudinary-powered export pipeline.
+                    </p>
+
+                    {file && !isUploading && uploadStatus !== 'processing' && (
+                      <div className="mt-8 flex w-full max-w-xl flex-col items-center gap-4">
+                        <div className="w-full rounded-2xl border border-white/10 bg-black/25 px-4 py-4 text-left backdrop-blur-md">
+                          <div className="text-xs font-medium uppercase tracking-[0.2em] text-white/45">Selected file</div>
+                          <div className="mt-2 text-sm text-white/85">{file.name}</div>
+                        </div>
+
+                        <button
+                          onClick={handleUpload}
+                          className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-7 py-3.5 text-sm font-semibold text-white shadow-[0_0_30px_rgba(168,85,247,0.18)] transition hover:scale-[1.01] hover:shadow-[0_0_40px_rgba(168,85,247,0.24)]"
+                        >
+                          Generate Captions <Zap size={16} />
+                        </button>
+                      </div>
+                    )}
+
+                    {isUploading && (
+                      <div className="mt-8 w-full max-w-xl">
+                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                          <div className="h-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
+                        </div>
+                        <p className="mt-3 text-sm text-white/60">Uploading and preparing your transcription pipeline...</p>
+                      </div>
+                    )}
+
+                    {uploadStatus === 'processing' && (
+                      <div className="mt-8 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-sm text-white/80 backdrop-blur-md">
+                        <Loader2 className="animate-spin text-violet-300" size={18} />
+                        Whisper AI is generating captions...
+                      </div>
+                    )}
+
+                    {uploadStatus === 'error' && (
+                      <div className="mt-8 flex items-center gap-2 rounded-2xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-200">
+                        <AlertCircle size={16} />
+                        Something went wrong. Please try again.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </motion.section>
           )}
-          
-          <div className="flex flex-col items-center relative z-20">
-            {uploadStatus === 'success' && videoUrl ? (
-              <div className="w-full flex flex-col md:flex-row gap-8">
-                
-                {/* Left Side: Video Player */}
-                <div className="flex-1 animate-in slide-in-from-left duration-500">
-                  <div className="relative rounded-2xl overflow-hidden border-2 border-white/20 shadow-[0_0_40px_rgba(168,85,247,0.4)] bg-black mb-4">
-                    <video 
+
+          {uploadStatus === 'success' && videoUrl && (
+            <motion.section
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.08 }}
+              className="mt-12 grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.75fr)]"
+            >
+              <div className="rounded-[28px] border border-white/10 bg-white/5 p-4 shadow-[0_0_60px_rgba(15,23,42,0.35)] backdrop-blur-md">
+                <div className="rounded-[24px] border border-white/10 bg-[#070b17]/90 p-3 md:p-4">
+                  {/* 🟢 FIX: Smart Video Container dynamically handles both Landscape & Portrait */}
+                  <div className="flex w-full items-center justify-center overflow-hidden rounded-[20px] border border-white/10 bg-black shadow-[0_0_40px_rgba(168,85,247,0.12)]">
+                    <video
                       ref={videoRef}
-                      controls 
+                      controls
                       controlsList="nodownload"
-                      autoPlay 
-                      className="w-full aspect-[9/16] object-cover"
+                      autoPlay
+                      // 🟢 Set exact shape to avoid stretch
+                      style={{ aspectRatio: `${vidDimensions.w} / ${vidDimensions.h}` }} 
+                      // 🟢 Max height 500px so it never blows up the screen!
+                      className="max-h-[500px] w-auto max-w-full object-contain" 
                       crossOrigin="anonymous"
                       onLoadedMetadata={handleVideoLoadedMetadata}
                     >
                       <source src={videoUrl} type="video/mp4" />
                       {vttPreviewUrl && (
-                        <track 
-                          label="Chad Captions" 
-                          kind="subtitles" 
-                          srcLang="en" 
-                          src={vttPreviewUrl} 
-                          default 
+                        <track
+                          label="English Captions"
+                          kind="subtitles"
+                          srcLang="en"
+                          src={vttPreviewUrl}
+                          default
                         />
                       )}
                     </video>
                   </div>
                 </div>
+              </div>
 
-                {/* Right Side: Tools & Premium Controls */}
-                <div className="flex-1 flex flex-col gap-4 animate-in slide-in-from-right duration-500 text-left">
-                  
-                  {/* Edit Captions Box */}
-                  <div className="bg-black/40 p-5 rounded-2xl border border-white/10">
-                    <div className="flex justify-between items-center mb-4">
-                      <h4 className="font-bold flex items-center gap-2"><Edit3 size={18} className="text-purple-400"/> Edit Text</h4>
-                      {!isEditing ? (
-                         <button onClick={() => setIsEditing(true)} className="text-xs bg-white/10 px-3 py-1 rounded-full hover:bg-white/20 transition">Edit Mode</button>
-                      ) : null}
+              <div className="flex flex-col gap-6">
+                <div className={`relative rounded-[28px] border border-white/10 bg-white/5 p-5 shadow-[0_0_60px_rgba(15,23,42,0.3)] backdrop-blur-md ${!isPremium ? 'opacity-60' : ''}`}>
+                  {!isPremium && (
+                    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-[28px] bg-black/60 backdrop-blur-md">
+                      <Lock size={32} className="mb-2 text-amber-300" />
+                      <p className="text-sm font-semibold text-white">Premium Feature</p>
+                      <button
+                        onClick={handleUpgradeClick}
+                        className="mt-3 rounded-full bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 px-4 py-2 text-sm font-semibold text-black shadow-[0_0_30px_rgba(250,204,21,0.22)]"
+                      >
+                        Upgrade to PRO
+                      </button>
                     </div>
-                    
+                  )}
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xs font-medium uppercase tracking-[0.2em] text-white/45">Transcript</div>
+                      <h3 className="mt-1 text-lg font-semibold text-white">Edit captions</h3>
+                    </div>
+                    {!isEditing && (
+                      <button
+                        onClick={() => setIsEditing(true)}
+                        className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/80 transition hover:bg-white/10"
+                      >
+                        Edit
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="mt-4 pointer-events-auto">
                     {isEditing ? (
-                      <div className="flex flex-col gap-2">
+                      <div className="space-y-3">
                         <textarea
                           value={editedSubtitles}
                           onChange={(e) => setEditedSubtitles(e.target.value)}
-                          className="w-full h-32 bg-black/60 border border-purple-500/30 rounded-lg p-2 text-xs text-white font-mono focus:outline-none focus:border-purple-500"
+                          className="h-40 w-full rounded-2xl border border-white/10 bg-black/25 p-4 text-sm text-white outline-none transition focus:border-violet-400/40"
+                          style={{ fontFamily: 'Inter, Segoe UI, sans-serif' }}
                         />
-                        <button 
+                        <button
                           onClick={handleSaveCaptions}
                           disabled={isUpdatingCaptions}
-                          className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition"
+                          className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-5 py-3 text-sm font-semibold text-white shadow-[0_0_30px_rgba(168,85,247,0.16)] transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-70"
                         >
                           {isUpdatingCaptions ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-                          Save Changes
+                          Save changes
                         </button>
                       </div>
                     ) : (
-                      <div className="h-32 overflow-y-auto text-xs text-gray-400 font-mono whitespace-pre-wrap bg-black/20 p-2 rounded border border-white/5">
-                        {subtitles.substring(0, 200)}...
+                      <div
+                        className="max-h-40 overflow-y-auto rounded-2xl border border-white/10 bg-black/20 p-4 text-sm leading-6 text-white/70"
+                        style={{ fontFamily: 'Inter, Segoe UI, sans-serif' }}
+                      >
+                        {subtitles.substring(0, 260)}...
                       </div>
                     )}
                   </div>
+                </div>
 
-                  {/* 👑 Premium Styling Box */}
-                  <div className="bg-gradient-to-br from-indigo-900/20 to-purple-900/20 p-5 rounded-2xl border border-purple-500/30 relative overflow-hidden">
-                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-yellow-400 to-yellow-600" />
-                    
-                    <h4 className="font-bold flex items-center gap-2 text-yellow-400 mb-4">
-                      <Crown size={18} /> Pro Styling Features
-                    </h4>
+                <div className="relative overflow-hidden rounded-[28px] border border-amber-400/20 bg-gradient-to-br from-white/8 to-white/5 p-5 shadow-[0_0_60px_rgba(234,179,8,0.08)] backdrop-blur-md">
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(250,204,21,0.14),transparent_55%)]" />
+                  <div className="relative z-10">
+                    <div className="flex items-center gap-2 text-amber-300">
+                      <Crown size={18} />
+                      <span className="text-sm font-semibold uppercase tracking-[0.18em]">Pro Studio Styling</span>
+                    </div>
 
-                    {!isPremium && (
-                      <div className="absolute inset-0 z-10 bg-[#050505]/80 backdrop-blur-sm flex flex-col items-center justify-center rounded-2xl border border-yellow-500/20">
-                        <div className="bg-yellow-500/20 p-3 rounded-full mb-3">
-                           <Lock className="text-yellow-500" size={24} />
+                    <h3 className="mt-3 text-xl font-semibold text-white">Locked premium controls</h3>
+                    <p className="mt-2 text-sm leading-6 text-white/65">
+                      Unlock refined color control, cinematic typography, placement tuning, and a polished live preview built for premium creators.
+                    </p>
+
+                    {!isPremium ? (
+                      <div className="mt-5 rounded-[24px] border border-amber-400/20 bg-black/20 p-5 backdrop-blur-md">
+                        <div className="flex items-start gap-3">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-amber-400/20 bg-amber-400/10 text-amber-200">
+                            <Lock size={18} />
+                          </div>
+                          <div>
+                            <div className="text-sm font-semibold text-white">Exclusive premium workflow</div>
+                            <div className="mt-1 text-sm leading-6 text-white/60">
+                              Unlock custom subtitle styling, positioning, and elevated export controls.
+                            </div>
+                          </div>
                         </div>
-                        <h5 className="font-bold text-white mb-1">Premium Feature</h5>
-                        <p className="text-xs text-gray-400 mb-4 px-6 text-center">Unlock custom colors, fonts, sizes, and realtime live preview.</p>
-                        <button 
-                           onClick={handleUpgradeClick}
-                           className="bg-yellow-500 hover:bg-yellow-400 text-black px-6 py-2 rounded-full font-bold text-sm shadow-[0_0_20px_rgba(234,179,8,0.3)] transition transform hover:scale-105"
+
+                        <button
+                          onClick={handleUpgradeClick}
+                          className="mt-5 inline-flex w-full items-center justify-center rounded-full bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 px-5 py-3 text-sm font-semibold text-black shadow-[0_0_30px_rgba(250,204,21,0.22)] transition hover:scale-[1.01] hover:shadow-[0_0_40px_rgba(250,204,21,0.28)]"
                         >
-                           Upgrade to PRO
+                          Upgrade to PRO
                         </button>
                       </div>
+                    ) : (
+                      <div className="mt-5 grid grid-cols-2 gap-3">
+                        <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                          <div className="text-xs text-white/45">Status</div>
+                          <div className="mt-1 text-sm font-medium text-white">Premium active</div>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                          <div className="text-xs text-white/45">Export</div>
+                          <div className="mt-1 text-sm font-medium text-white">Cinematic</div>
+                        </div>
+                      </div>
                     )}
-                    
-                    <div className={`grid grid-cols-2 gap-4 transition-all duration-500 ${!isPremium ? 'opacity-30 blur-[2px] pointer-events-none' : ''}`}>
-                      <div className="flex flex-col gap-1">
-                        <label className="text-xs text-gray-400 flex items-center gap-1"><Palette size={12}/> Color</label>
-                        <input 
-                          type="color" 
-                          value={captionColor}
-                          onChange={(e) => setCaptionColor(e.target.value)}
-                          className="w-full h-10 rounded cursor-pointer bg-transparent border-0"
-                        />
-                      </div>
-                      
-                      <div className="flex flex-col gap-1">
-                        <label className="text-xs text-gray-400 flex items-center gap-1"><Type size={12}/> Font</label>
-                        <select 
-                          value={captionFont}
-                          onChange={(e) => setCaptionFont(e.target.value)}
-                          className="bg-black/50 border border-white/10 rounded-lg p-2 text-sm text-white focus:outline-none"
-                        >
-                          <option value="Impact">Impact (Chad)</option>
-                          <option value="Arial">Arial (Clean)</option>
-                          <option value="Roboto">Roboto (Modern)</option>
-                          <option value="Courier">Courier (Hacker)</option>
-                        </select>
-                      </div>
+                  </div>
+                </div>
 
-                      <div className="flex flex-col gap-1">
-                        <label className="text-xs text-gray-400">Font Size (CSS px)</label>
-                        <input 
-                          type="range" 
-                          min="20" max="60" 
-                          value={captionSize}
-                          onChange={(e) => setCaptionSize(e.target.value)}
-                          className="w-full accent-yellow-400"
-                        />
-                        <span className="text-xs text-gray-500">{captionSize}px</span>
-                      </div>
+                <div className={`rounded-[28px] border border-white/10 bg-white/5 p-5 backdrop-blur-md ${!isPremium ? 'opacity-50 pointer-events-none' : ''}`}>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-2">
+                      <label className="text-xs font-medium uppercase tracking-[0.18em] text-white/45 flex items-center gap-1"><Palette size={12}/> Accent</label>
+                      <input
+                        type="color"
+                        value={captionColor}
+                        onChange={(e) => setCaptionColor(e.target.value)}
+                        className="h-12 w-full cursor-pointer rounded-2xl border border-white/10 bg-transparent p-1"
+                      />
+                    </div>
 
-                      <div className="flex flex-col gap-1">
-                        <label className="text-xs text-gray-400 flex items-center gap-1"><MoveVertical size={12}/> Position</label>
-                        <select 
-                          value={captionPosition}
-                          onChange={(e) => setCaptionPosition(e.target.value)}
-                          className="bg-black/50 border border-white/10 rounded-lg p-2 text-sm text-white focus:outline-none"
-                        >
-                          <option value="south">Bottom</option>
-                          <option value="center">Middle</option>
-                          <option value="north">Top</option>
-                        </select>
-                      </div>
+                    <div className="flex flex-col gap-2">
+                      <label className="text-xs font-medium uppercase tracking-[0.18em] text-white/45 flex items-center gap-1"><Type size={12}/> Font</label>
+                      <select
+                        value={isPremium ? captionFont : 'Arial'}
+                        onChange={(e) => {
+                          if (isPremium) setCaptionFont(e.target.value);
+                        }}
+                        className="rounded-2xl border border-white/10 bg-black/25 p-3 text-sm text-white outline-none transition focus:border-violet-400/40"
+                      >
+                        <option value="Impact">Impact</option>
+                        <option value="Arial">Arial</option>
+                        <option value="Roboto">Roboto</option>
+                        <option value="Courier">Courier</option>
+                      </select>
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      <label className="text-xs font-medium uppercase tracking-[0.18em] text-white/45">Font size</label>
+                      <input
+                        type="range"
+                        min="20"
+                        max="60"
+                        value={isPremium ? captionSize : '42'}
+                        onChange={(e) => {
+                          if (isPremium) setCaptionSize(e.target.value);
+                        }}
+                        className="w-full accent-violet-400"
+                      />
+                      <span className="text-xs text-white/45">{isPremium ? captionSize : '42'}px</span>
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      <label className="text-xs font-medium uppercase tracking-[0.18em] text-white/45 flex items-center gap-1"><MoveVertical size={12}/> Position</label>
+                      <select
+                        value={isPremium ? captionPosition : 'south'}
+                        onChange={(e) => {
+                          if (isPremium) setCaptionPosition(e.target.value);
+                        }}
+                        className="rounded-2xl border border-white/10 bg-black/25 p-3 text-sm text-white outline-none transition focus:border-violet-400/40"
+                      >
+                        <option value="south">Bottom</option>
+                        <option value="center">Middle</option>
+                        <option value="north">Top</option>
+                      </select>
                     </div>
                   </div>
+                </div>
 
-                  {downloadUrl && (
-                    <a 
-                      href={downloadUrl} 
+                {downloadUrl && (
+                  isSignedIn ? (
+                    <a
+                      href={downloadUrl}
                       download
-                      className="mt-2 flex items-center justify-center gap-2 bg-yellow-500 text-black px-6 py-4 rounded-xl font-black text-lg hover:bg-yellow-400 transition shadow-[0_0_20px_rgba(234,179,8,0.4)] w-full"
+                      className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-emerald-400 via-cyan-400 to-violet-500 px-6 py-3.5 text-sm font-semibold text-black shadow-[0_0_30px_rgba(56,189,248,0.12)] transition hover:scale-[1.01]"
                     >
-                      <Download size={24} /> Download Viral Clip
+                      <Download size={18} /> Download captioned video
                     </a>
-                  )}
-
-                  <button 
-                    onClick={() => {
-                      setFile(null);
-                      setVideoUrl(null);
-                      setDownloadUrl(null);
-                      setUploadStatus('idle');
-                    }}
-                    className="mt-2 text-sm text-gray-400 hover:text-white transition underline underline-offset-4 text-center"
-                  >
-                    Start Over
-                  </button>
-
-                </div>
-              </div>
-            ) : uploadStatus === 'processing' ? (
-              <div className="flex flex-col items-center">
-                <Loader2 className="text-purple-400 animate-spin mb-4" size={48} />
-                <h3 className="text-xl font-semibold">AI is Listening...</h3>
-                <p className="text-gray-500 text-sm mt-2">Generating bold viral captions</p>
-              </div>
-            ) : (
-              <>
-                <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center mb-4 relative">
-                  {isUploading ? (
-                    <span className="text-xs font-bold text-purple-400">{uploadProgress}%</span>
                   ) : (
-                    <Upload className="text-purple-400" size={32} />
-                  )}
-                  {isUploading && <Loader2 className="absolute inset-0 text-purple-600 animate-spin" size={64} />}
-                </div>
-
-                <h3 className="text-xl font-semibold mb-2">
-                  {file ? file.name : "Select Video to Start"}
-                </h3>
-
-                {isUploading && (
-                  <div className="w-full max-w-xs bg-white/10 h-1 rounded-full mt-4 overflow-hidden">
-                    <div className="bg-purple-600 h-full transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
-                  </div>
+                    <div className="mt-5 w-full text-center">
+                      <SignInButton mode="modal">
+                        <button className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-6 py-3.5 text-sm font-semibold text-white shadow-[0_0_30px_rgba(168,85,247,0.2)] transition hover:scale-[1.01]">
+                          <Download size={18} /> Sign in to download
+                        </button>
+                      </SignInButton>
+                      <p className="mt-3 text-xs text-white/50">
+                        Create a free account to unlock downloads.
+                      </p>
+                    </div>
+                  )
                 )}
 
-                {file && !isUploading && (
-                  <button 
-                    onClick={handleUpload}
-                    className="mt-6 z-20 flex items-center gap-2 bg-purple-600 px-8 py-3 rounded-xl font-semibold hover:bg-purple-500 transition shadow-lg"
-                  >
-                    Generate Viral Clip <Zap size={18} />
-                  </button>
-                )}
-              </>
-            )}
-            
-            {uploadStatus === 'error' && (
-              <div className="mt-4 text-red-400 flex items-center gap-2 text-sm">
-                <AlertCircle size={16} /> Something went wrong. Try again.
+                <button
+                  onClick={() => {
+                    setFile(null);
+                    setVideoUrl(null);
+                    setDownloadUrl(null);
+                    setUploadStatus('idle');
+                    setUploadProgress(0);
+                    setSubtitles('');
+                    setEditedSubtitles('');
+                    setCloudSubId(null);
+                    setIsEditing(false);
+                  }}
+                  className="mt-4 w-full text-sm text-white/50 transition hover:text-white"
+                >
+                  Start over
+                </button>
               </div>
-            )}
-          </div>
-        </motion.div>
-      </main>
+            </motion.section>
+          )}
+        </main>
+      </div>
     </div>
   );
 }
