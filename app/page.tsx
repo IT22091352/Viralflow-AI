@@ -30,11 +30,48 @@ export default function LandingPage() {
 
   const isPremium = user?.publicMetadata?.isPremium === true;
 
-  // 🟢 FIX: Default State එක 20px (පොඩිම සයිස් එක) කළා
   const [captionColor, setCaptionColor] = useState("#FACC15");
   const [captionFont, setCaptionFont] = useState("Arial"); 
   const [captionSize, setCaptionSize] = useState("20"); 
   const [captionPosition, setCaptionPosition] = useState("south");
+
+  // 🟢 FIX 1: Page එක Load වෙද්දි කලින් හදපු Video එකක් (Local Storage එකේ) තියෙනවද බලලා Load කරනවා
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedState = localStorage.getItem('viralflow_recovery_state');
+      if (savedState) {
+        try {
+          const parsed = JSON.parse(savedState);
+          if (parsed.uploadStatus === 'success' && parsed.videoUrl) {
+            setVideoUrl(parsed.videoUrl);
+            setSubtitles(parsed.subtitles);
+            setEditedSubtitles(parsed.subtitles);
+            setCloudSubId(parsed.cloudSubId);
+            setVidDimensions(parsed.vidDimensions || { w: 1080, h: 1920 });
+            setMarketingData(parsed.marketingData || null);
+            setUploadStatus('success');
+          }
+        } catch (e) {
+          console.error("Failed to restore state", e);
+        }
+      }
+    }
+  }, []);
+
+  // 🟢 FIX 2: Video එකක් සාර්ථකව හැදුවම, ඒක බ්‍රවුසරයේ Local Storage එකේ Save කරනවා
+  useEffect(() => {
+    if (typeof window !== 'undefined' && uploadStatus === 'success' && videoUrl) {
+      const stateToSave = {
+        videoUrl,
+        subtitles,
+        cloudSubId,
+        vidDimensions,
+        marketingData,
+        uploadStatus: 'success'
+      };
+      localStorage.setItem('viralflow_recovery_state', JSON.stringify(stateToSave));
+    }
+  }, [uploadStatus, videoUrl, subtitles, cloudSubId, vidDimensions, marketingData]);
 
   const updateRenderedPlayerSize = useCallback(() => {
     const videoEl = videoRef.current;
@@ -83,7 +120,6 @@ export default function LandingPage() {
   const buildStyledVtt = useCallback((rawVtt: string) => {
     const activePosition = isPremium ? captionPosition : 'south';
     const linePercent = getLinePercentForPosition(activePosition);
-    // 🟢 FIX: Free නම් 20px විතරයි
     const activeCssFontSize = isPremium ? parseInt(captionSize, 10) : 20;
 
     const playerW = renderedPlayerDimensions.w > 0 ? renderedPlayerDimensions.w : 300;
@@ -231,7 +267,6 @@ export default function LandingPage() {
   };
 
   useEffect(() => {
-    // 🟢 FIX: Force lock Free users to Yellow, Bottom, Arial, and Size 20
     if (!isPremium) {
       setCaptionColor('#FACC15');
       setCaptionFont('Arial');
@@ -270,7 +305,6 @@ export default function LandingPage() {
   ) => {
     const activeColor = isPremium ? color : '#FACC15';
     const activeFont = isPremium ? font : 'Arial';
-    // 🟢 FIX: Free නම් Download එකෙත් 20px විතරයි
     const activeCssFontSize = isPremium ? cssFontSize : 20;
     const activePosition = isPremium ? position : 'south';
 
@@ -324,7 +358,6 @@ export default function LandingPage() {
     const url = URL.createObjectURL(blob);
     setVttPreviewUrl(url);
     if (videoUrl && cloudSubId) {
-      // 🟢 FIX: Free Preview එකෙත් 20px
       const cssFontSize = isPremium ? parseInt(captionSize, 10) : 20;
       const activePosition = isPremium ? captionPosition : 'south';
       updateCloudinaryUrl(
@@ -340,6 +373,18 @@ export default function LandingPage() {
     setSubtitles(editedSubtitles);
     setIsEditing(false);
     setIsUpdatingCaptions(false);
+    
+    // 🟢 FIX: Update local storage when user edits subtitles
+    if (typeof window !== 'undefined') {
+      const savedState = localStorage.getItem('viralflow_recovery_state');
+      if (savedState) {
+        try {
+          const parsed = JSON.parse(savedState);
+          parsed.subtitles = editedSubtitles;
+          localStorage.setItem('viralflow_recovery_state', JSON.stringify(parsed));
+        } catch(e) {}
+      }
+    }
   };
 
   const handleUpgradeClick = () => {
@@ -366,7 +411,6 @@ export default function LandingPage() {
         video::cue {
           color: ${isPremium ? captionColor : '#FACC15'} !important;
           font-family: ${isPremium ? `'${captionFont}', sans-serif` : `'Inter', 'Segoe UI', sans-serif`} !important;
-          /* 🟢 FIX: Free Preview CSS එකේ සයිස් එක 20px කලා */
           font-size: ${isPremium ? parseInt(captionSize, 10) : 20}px !important;
           font-weight: 800 !important;
           text-transform: none !important;
@@ -472,7 +516,8 @@ export default function LandingPage() {
 
                     <p className="mt-3 max-w-xl text-sm leading-6 text-white/60 md:text-base">
                       High-speed cloud rendering with millimeter-perfect subtitle placement. <br/>
-                      <span className="text-xs text-white/40 mt-1 block font-semibold text-amber-200/50">(Supported formats: MP4, MOV. Max size: 100MB or 5 mins)</span>
+                      <span className="text-xs text-amber-200/70 mt-2 block font-semibold">⚠️ Currently supporting English audio only.</span>
+                      <span className="text-[11px] text-white/40 mt-1 block font-medium">(Supported formats: MP4, MOV. Max size: 100MB or 5 mins)</span>
                     </p>
 
                     {file && !isUploading && uploadStatus !== 'processing' && (
@@ -750,6 +795,10 @@ export default function LandingPage() {
                       setEditedSubtitles('');
                       setCloudSubId(null);
                       setIsEditing(false);
+                      // 🟢 FIX 3: Start over කරද්දි Local Storage එකත් Clear කරනවා
+                      if (typeof window !== 'undefined') {
+                        localStorage.removeItem('viralflow_recovery_state');
+                      }
                     }}
                     className="mt-4 py-2 text-sm font-medium text-white/40 transition hover:text-white"
                   >
@@ -774,7 +823,7 @@ export default function LandingPage() {
                   <p className="text-white/60 text-sm mb-8 leading-relaxed">Perfect for beginners and creators just starting their viral journey.</p>
                   
                   <div className="flex-1 space-y-4 mb-8">
-                    <div className="flex items-center gap-3 text-sm text-white/80"><CheckCircle size={18} className="text-emerald-400" /> Auto AI Captions</div>
+                    <div className="flex items-center gap-3 text-sm text-white/80"><CheckCircle size={18} className="text-emerald-400" /> Auto AI Captions (English)</div>
                     <div className="flex items-center gap-3 text-sm text-white/80"><CheckCircle size={18} className="text-emerald-400" /> AI Growth Strategy</div>
                     <div className="flex items-center gap-3 text-sm text-white/80"><CheckCircle size={18} className="text-emerald-400" /> Max 100MB / 5 mins duration</div>
                     <div className="flex items-center gap-3 text-sm text-white/40"><Lock size={16} /> No Watermark</div>
