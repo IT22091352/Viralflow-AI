@@ -20,7 +20,7 @@ export const metadata: Metadata = {
     siteName: "ViralFlow AI",
     images: [
       {
-        url: "https://tryviralflow.vercel.app/", 
+        url: "/opengraph-image.png", 
         width: 1200,
         height: 630,
         alt: "ViralFlow AI - Premium Video Subtitle Generator",
