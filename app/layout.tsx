@@ -20,7 +20,7 @@ export const metadata: Metadata = {
     siteName: "ViralFlow AI",
     images: [
       {
-        url: "/opengraph-image.png", 
+        url: "/opengraph-image.jpg", 
         width: 1200,
         height: 630,
         alt: "ViralFlow AI - Premium Video Subtitle Generator",
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "ViralFlow AI | The Ultimate AI Caption Generator",
     description: "Auto-generate perfectly synced, cinematic subtitles in seconds. Perfect for TikTok, Reels, and Shorts.",
-    images: ["/opengraph-image.png"], 
+    images: ["/opengraph-image.jpg"], 
   },
 };
 
