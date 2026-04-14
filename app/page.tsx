@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Upload, Zap, Loader2, AlertCircle, Download, Edit3, Check, Crown, Palette, Type, MoveVertical, Lock, CheckCircle, TrendingUp, Users, Share2, Hash } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { SignInButton, UserButton, useUser } from "@clerk/nextjs";
+import Image from 'next/image';
 
 export default function LandingPage() {
   const { isSignedIn, user } = useUser();
@@ -213,7 +214,7 @@ export default function LandingPage() {
       xhr.onload = async () => {
         if (xhr.status === 200) {
           const uploadData = JSON.parse(xhr.responseText);
-          const uploadedVideoUrl = uploadData.secure_url;
+          const uploadedVideoUrl = uploadData.secure_url.replace('/upload/', '/upload/f_auto,q_auto/');
           
           setVidDimensions({ 
             w: uploadData.width || 1080, 
@@ -333,8 +334,7 @@ export default function LandingPage() {
       }
     }
 
-    const magicString = `/upload/fl_attachment:ViralFlow_Clip/l_subtitles:${activeFont}_${cloudFontSize}:${subId},co_rgb:${cleanColor},bo_${borderThickness}px_solid_black,g_${gravity},y_${yOffset}/`;
-    const newBurnInUrl = vidUrl.replace('/upload/', magicString);
+    const magicString = `/upload/f_auto,q_auto/fl_attachment:ViralFlow_Clip/l_subtitles:${activeFont}_${cloudFontSize}:${subId},co_rgb:${cleanColor},bo_${borderThickness}px_solid_black,g_${gravity},y_${yOffset}/`;    const newBurnInUrl = vidUrl.replace('/upload/', magicString);
     setDownloadUrl(newBurnInUrl);
   };
 
@@ -426,11 +426,14 @@ export default function LandingPage() {
         <nav className="sticky top-0 z-50 border-b border-white/10 bg-[#050816]/70 backdrop-blur-md">
           <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 md:px-8">
             <div className="flex items-center gap-3 cursor-pointer">
-              {/* 🟢 අලුත් Logo එක මෙතනට දැම්මා */}
-              <img 
+              {/* 🟢 Optimized Next.js Image */}
+              <Image 
                 src="/logo.png" 
                 alt="ViralFlow Logo" 
-                className="h-10 w-auto object-contain drop-shadow-[0_0_15px_rgba(168,85,247,0.4)]" 
+                width={40} 
+                height={40} 
+                className="object-contain drop-shadow-[0_0_15px_rgba(168,85,247,0.4)]" 
+                priority
               />
               <div>
                 <div className="text-sm font-bold tracking-[0.15em] text-white/90 uppercase">ViralFlow</div>
@@ -520,7 +523,7 @@ export default function LandingPage() {
 
                     <p className="mt-3 max-w-xl text-sm leading-6 text-white/60 md:text-base">
                       High-speed cloud rendering with millimeter-perfect subtitle placement. <br/>
-                      <span className="text-xs text-amber-200/70 mt-2 block font-semibold">⚠️ Currently supporting English audio only.</span>
+                      <span className="text-xs text-amber-200/70 mt-2 block font-semibold">⚠️ Currently supporting English language only.</span>
                       <span className="text-[11px] text-white/40 mt-1 block font-medium">(Supported formats: MP4, MOV. Max size: 100MB or 5 mins)</span>
                     </p>
 
@@ -799,14 +802,14 @@ export default function LandingPage() {
                       setEditedSubtitles('');
                       setCloudSubId(null);
                       setIsEditing(false);
-                      // 🟢 FIX 3: Start over කරද්දි Local Storage එකත් Clear කරනවා
                       if (typeof window !== 'undefined') {
                         localStorage.removeItem('viralflow_recovery_state');
                       }
                     }}
-                    className="mt-4 py-2 text-sm font-medium text-white/40 transition hover:text-white"
+                    className="mt-5 flex w-full items-center justify-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-6 py-3.5 text-sm font-bold text-red-400 shadow-[0_0_20px_rgba(239,68,68,0.1)] transition hover:bg-red-500/20 hover:scale-[1.02]"
                   >
-                    Clear and start a new project
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
+                    Remove Video & Start New
                   </button>
                 </div>
               </div>
@@ -878,8 +881,14 @@ export default function LandingPage() {
           <div className="mx-auto max-w-7xl px-6 md:px-8">
             <div className="flex flex-col md:flex-row justify-between items-center gap-6">
               <div className="flex items-center gap-2">
-                {/* 🟢 අලුත් Logo Image එක (පොඩි සයිස්) */}
-                <img src="/logo.png" alt="ViralFlow Logo" className="h-6 w-auto object-contain" />
+                {/* 🟢 Optimized Footer Image */}
+                <Image 
+                  src="/logo.png" 
+                  alt="ViralFlow Logo" 
+                  width={24} 
+                  height={24} 
+                  className="object-contain" 
+                />
                 <span className="text-sm font-bold tracking-widest text-white/80 uppercase">ViralFlow AI</span>
               </div>
               
